@@ -35,16 +35,30 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 1rem;
+    margin-bottom: 1.25rem;
+  }
+
+  .header-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .ascii-accent {
+    font-family: 'Courier New', monospace;
+    font-size: 0.6rem;
+    line-height: 1.1;
+    color: #3a3530;
+    white-space: pre;
+    user-select: none;
   }
 
   .label {
-    font-family: 'Inter', sans-serif;
-    font-weight: 400;
-    font-size: 0.7rem;
-    letter-spacing: 0.25em;
-    text-transform: uppercase;
-    color: #a09a92;
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600;
+    font-size: 1.4rem;
+    letter-spacing: 0.08em;
+    color: #d0cbc5;
   }
 
   .last-updated {
@@ -72,11 +86,11 @@
   .tab {
     font-family: 'Inter', sans-serif;
     font-weight: 400;
-    font-size: 0.62rem;
+    font-size: 0.72rem;
     letter-spacing: 0.12em;
     text-transform: uppercase;
     color: #6b6660;
-    padding: 0.5rem 0.75rem;
+    padding: 0.6rem 0.85rem;
     cursor: pointer;
     white-space: nowrap;
     border-bottom: 1px solid transparent;
@@ -93,7 +107,7 @@
   }
 
   .tab .count {
-    font-size: 0.55rem;
+    font-size: 0.6rem;
     color: #4a4640;
     margin-left: 0.3rem;
   }
@@ -112,10 +126,21 @@
     opacity: 0;
     transform: translateY(4px);
     transition: opacity 0.4s ease, transform 0.4s ease;
+    position: relative;
   }
 
   .article.visible { opacity: 1; transform: translateY(0); }
   .article:last-child { border-bottom: none; }
+
+  .article-divider {
+    font-family: 'Courier New', monospace;
+    font-size: 0.5rem;
+    color: #2a2725;
+    text-align: center;
+    padding: 0.25rem 0;
+    user-select: none;
+    letter-spacing: 0.3em;
+  }
 
   .article-header {
     cursor: pointer;
@@ -415,7 +440,13 @@
 <body>
 <div class="container">
   <div class="header">
-    <div class="label">News Feed</div>
+    <div class="header-left">
+      <div class="ascii-accent">┌──┐
+│▓▒│
+│░▒│
+└──┘</div>
+      <div class="label">News Feed</div>
+    </div>
     <div class="last-updated" id="last-updated"></div>
   </div>
   <div class="tabs" id="tabs"></div>
@@ -804,6 +835,15 @@ function renderFeed(articles) {
     });
 
     feed.appendChild(el);
+
+    // ASCII divider between articles
+    if (i < filtered.length - 1) {
+      const divider = document.createElement('div');
+      divider.className = 'article-divider';
+      divider.textContent = '· · · · ·';
+      feed.appendChild(divider);
+    }
+
     setTimeout(() => el.classList.add('visible'), i * 40);
   });
 }
