@@ -338,19 +338,49 @@ function getCategoryWeights() {
 // --- RSS Fetching ---
 const CORS_PROXY = 'https://cors-proxy.kyle-d7d.workers.dev';
 
+function parseRSS(xml) {
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(xml, 'text/xml');
+
+  // Try RSS 2.0 format
+  let items = doc.querySelectorAll('item');
+  if (items.length === 0) {
+    // Try Atom format
+    items = doc.querySelectorAll('entry');
+  }
+
+  const results = [];
+  items.forEach(item => {
+    const title = item.querySelector('title')?.textContent || '';
+    const link = item.querySelector('link')?.textContent
+      || item.querySelector('link')?.getAttribute('href') || '';
+    const description = item.querySelector('description')?.textContent
+      || item.querySelector('summary')?.textContent
+      || item.querySelector('content')?.textContent || '';
+    const pubDate = item.querySelector('pubDate')?.textContent
+      || item.querySelector('published')?.textContent
+      || item.querySelector('updated')?.textContent || '';
+
+    if (title) {
+      results.push({ title, link, description, pubDate });
+    }
+  });
+
+  return results;
+}
+
 async function fetchFeed(source, category) {
-  const rss2jsonUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(source.url)}`;
-  const proxyUrl = `${CORS_PROXY}/?url=${encodeURIComponent(rss2jsonUrl)}`;
+  const proxyUrl = `${CORS_PROXY}/?url=${encodeURIComponent(source.url)}`;
 
   try {
     const res = await fetch(proxyUrl);
     if (!res.ok) return [];
-    const data = await res.json();
-    if (data.status !== 'ok' || !data.items) return [];
+    const xml = await res.text();
+    const items = parseRSS(xml).slice(0, 8);
 
-    return data.items.slice(0, 8).map(item => ({
+    return items.map(item => ({
       title: cleanText(item.title || ''),
-      tldr: makeTLDR(item.description || item.content || ''),
+      tldr: makeTLDR(item.description || ''),
       link: item.link || '#',
       source: source.name,
       category: category,
