@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>News Feed</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;1,400&family=Inter:wght@300;400;500;600&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #191919;
+    color: #e8e4df;
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  ::-webkit-scrollbar { width: 3px; }
+  ::-webkit-scrollbar-track { background: #191919; }
+  ::-webkit-scrollbar-thumb { background: #2a2725; border-radius: 2px; }
+  ::-webkit-scrollbar-thumb:hover { background: #3a3530; }
+  * { scrollbar-width: thin; scrollbar-color: #2a2725 #191919; }
+
+  .container {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 1.25rem 1.5rem;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+  }
+
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+  }
+
+  .label {
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    font-size: 0.7rem;
+    letter-spacing: 0.25em;
+    text-transform: uppercase;
+    color: #a09a92;
+  }
+
+  .last-updated {
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    font-size: 0.6rem;
+    letter-spacing: 0.1em;
+    color: #6b6660;
+    text-transform: uppercase;
+  }
+
+  /* Category Tabs */
+  .tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 1.25rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  }
+
+  .tabs::-webkit-scrollbar { display: none; }
+
+  .tab {
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #6b6660;
+    padding: 0.5rem 0.75rem;
+    cursor: pointer;
+    white-space: nowrap;
+    border-bottom: 1px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.2s ease, border-color 0.2s ease;
+    user-select: none;
+  }
+
+  .tab:hover { color: #a09a92; }
+
+  .tab.active {
+    color: #d0cbc5;
+    border-bottom-color: #d0cbc5;
+  }
+
+  .tab .count {
+    font-size: 0.55rem;
+    color: #4a4640;
+    margin-left: 0.3rem;
+  }
+
+  .tab.active .count { color: #7a756e; }
+
+  /* Feed */
+  .feed {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .article {
+    padding: 1rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 0.4s ease, transform 0.4s ease;
+    cursor: pointer;
+    text-decoration: none;
+    display: block;
+    color: inherit;
+  }
+
+  .article:hover { background: rgba(255, 255, 255, 0.02); margin: 0 -0.5rem; padding: 1rem 0.5rem; border-radius: 4px; }
+  .article.visible { opacity: 1; transform: translateY(0); }
+  .article:last-child { border-bottom: none; }
+
+  .article-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.35rem;
+  }
+
+  .article-category {
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+    font-size: 0.55rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 0.15rem 0.4rem;
+    border-radius: 3px;
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .cat-ai { color: #7eb8d0; }
+  .cat-construction { color: #c4a35a; }
+  .cat-unreal { color: #8a8ed0; }
+  .cat-gaming { color: #6ec07a; }
+  .cat-technology { color: #c08a6e; }
+  .cat-startups { color: #c07eb8; }
+
+  .article-source {
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    font-size: 0.6rem;
+    color: #6b6660;
+  }
+
+  .article-time {
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    font-size: 0.6rem;
+    color: #5a5650;
+  }
+
+  .article-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-weight: 600;
+    font-size: 1.15rem;
+    line-height: 1.5;
+    color: #f2efea;
+    margin-bottom: 0.3rem;
+  }
+
+  .article-tldr {
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    font-size: 0.78rem;
+    line-height: 1.55;
+    color: #958f88;
+  }
+
+  .tldr-label {
+    font-weight: 500;
+    font-size: 0.6rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #6b6660;
+    margin-right: 0.3rem;
+  }
+
+  /* States */
+  .loading-state, .error-state, .empty-state {
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    font-size: 0.8rem;
+    color: #6b6660;
+    padding: 2rem 0;
+    text-align: center;
+  }
+
+  .loading-dots::after {
+    content: '';
+    animation: dots 1.5s steps(4, end) infinite;
+  }
+
+  @keyframes dots {
+    0% { content: ''; }
+    25% { content: '.'; }
+    50% { content: '..'; }
+    75% { content: '...'; }
+  }
+
+  /* Personalization indicator */
+  .personalized-tag {
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    font-size: 0.5rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #4a4640;
+    margin-left: auto;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <div class="header">
+    <div class="label">News Feed</div>
+    <div class="last-updated" id="last-updated"></div>
+  </div>
+  <div class="tabs" id="tabs"></div>
+  <div class="feed" id="feed">
+    <div class="loading-state">Fetching headlines<span class="loading-dots"></span></div>
+  </div>
+</div>
+
+<script>
+const FEEDS = {
+  ai: {
+    name: 'AI',
+    class: 'cat-ai',
+    sources: [
+      { name: 'MIT Tech Review', url: 'https://www.technologyreview.com/feed/' },
+      { name: 'Ars Technica AI', url: 'https://feeds.arstechnica.com/arstechnica/technology-lab' },
+      { name: 'The Verge AI', url: 'https://www.theverge.com/rss/ai-artificial-intelligence/index.xml' }
+    ]
+  },
+  construction: {
+    name: 'Construction',
+    class: 'cat-construction',
+    sources: [
+      { name: 'Construction Dive', url: 'https://www.constructiondive.com/feeds/news/' },
+      { name: 'ENR', url: 'https://www.enr.com/rss/1-enr-top-stories' }
+    ]
+  },
+  unreal: {
+    name: 'Unreal',
+    class: 'cat-unreal',
+    sources: [
+      { name: 'Unreal Engine', url: 'https://www.unrealengine.com/en-US/feed' },
+      { name: '80 Level', url: 'https://80.lv/feed/' }
+    ]
+  },
+  gaming: {
+    name: 'Gaming',
+    class: 'cat-gaming',
+    sources: [
+      { name: 'PC Gamer', url: 'https://www.pcgamer.com/rss/' },
+      { name: 'IGN', url: 'https://feeds.feedburner.com/ign/all' },
+      { name: 'Kotaku', url: 'https://kotaku.com/rss' }
+    ]
+  },
+  technology: {
+    name: 'Technology',
+    class: 'cat-technology',
+    sources: [
+      { name: 'Hacker News', url: 'https://hnrss.org/frontpage' },
+      { name: 'TechCrunch', url: 'https://techcrunch.com/feed/' },
+      { name: 'The Verge', url: 'https://www.theverge.com/rss/index.xml' }
+    ]
+  },
+  startups: {
+    name: 'Startups',
+    class: 'cat-startups',
+    sources: [
+      { name: 'TechCrunch Startups', url: 'https://techcrunch.com/category/startups/feed/' },
+      { name: 'Product Hunt', url: 'https://www.producthunt.com/feed' }
+    ]
+  }
+};
+
+const STORAGE_KEY = 'newsfeed_prefs';
+const CACHE_KEY = 'newsfeed_cache';
+const CACHE_TTL = 30 * 60 * 1000; // 30 min cache
+const MAX_ARTICLES = 50;
+const REFRESH_INTERVAL = 15 * 60 * 1000; // 15 min
+
+let allArticles = [];
+let activeCategory = 'all';
+
+// --- Personalization ---
+function getPrefs() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+  } catch { return {}; }
+}
+
+function savePrefs(prefs) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(prefs));
+}
+
+function trackClick(category) {
+  const prefs = getPrefs();
+  if (!prefs.clicks) prefs.clicks = {};
+  prefs.clicks[category] = (prefs.clicks[category] || 0) + 1;
+  prefs.lastClick = Date.now();
+  savePrefs(prefs);
+}
+
+function getCategoryWeights() {
+  const prefs = getPrefs();
+  const clicks = prefs.clicks || {};
+  const total = Object.values(clicks).reduce((a, b) => a + b, 0);
+  if (total < 5) return null; // need at least 5 clicks before personalizing
+
+  const weights = {};
+  const categories = Object.keys(FEEDS);
+  const base = 1 / categories.length;
+
+  categories.forEach(cat => {
+    const ratio = (clicks[cat] || 0) / total;
+    // Blend: 60% preference, 40% equal distribution
+    weights[cat] = 0.4 * base + 0.6 * ratio;
+  });
+
+  return weights;
+}
+
+// --- RSS Fetching ---
+async function fetchFeed(source, category) {
+  const proxy = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(source.url)}&count=8`;
+  try {
+    const res = await fetch(proxy);
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (data.status !== 'ok' || !data.items) return [];
+
+    return data.items.map(item => ({
+      title: cleanText(item.title || ''),
+      tldr: makeTLDR(item.description || item.content || ''),
+      link: item.link || '#',
+      source: source.name,
+      category: category,
+      categoryName: FEEDS[category].name,
+      categoryClass: FEEDS[category].class,
+      pubDate: new Date(item.pubDate || Date.now()),
+      timestamp: item.pubDate
+    })).filter(a => a.title.length > 0);
+  } catch {
+    return [];
+  }
+}
+
+function cleanText(html) {
+  const div = document.createElement('div');
+  div.innerHTML = html;
+  return div.textContent.trim();
+}
+
+function makeTLDR(html) {
+  let text = cleanText(html);
+  // Remove "Continue reading..." and similar
+  text = text.replace(/Continue reading.*/i, '').trim();
+  text = text.replace(/Read more.*/i, '').trim();
+  text = text.replace(/\[…\]/g, '').trim();
+  text = text.replace(/\.{3,}/g, '').trim();
+
+  // Get first 1-2 sentences, max ~180 chars
+  const sentences = text.match(/[^.!?]+[.!?]+/g);
+  if (sentences) {
+    let tldr = sentences[0].trim();
+    if (tldr.length < 80 && sentences[1]) {
+      tldr += ' ' + sentences[1].trim();
+    }
+    if (tldr.length > 200) tldr = tldr.slice(0, 197).trimEnd() + '...';
+    return tldr;
+  }
+
+  if (text.length > 200) return text.slice(0, 197).trimEnd() + '...';
+  return text || '';
+}
+
+function relativeTime(date) {
+  const now = new Date();
+  const diffMs = now - date;
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHr = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHr / 24);
+
+  if (diffMin < 1) return 'just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  if (diffHr < 24) return `${diffHr}h ago`;
+  if (diffDay === 1) return 'yesterday';
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return `${Math.floor(diffDay / 7)}w ago`;
+}
+
+// --- Caching ---
+function getCachedArticles() {
+  try {
+    const cached = JSON.parse(localStorage.getItem(CACHE_KEY));
+    if (cached && Date.now() - cached.time < CACHE_TTL) {
+      return cached.articles.map(a => ({ ...a, pubDate: new Date(a.pubDate) }));
+    }
+  } catch {}
+  return null;
+}
+
+function cacheArticles(articles) {
+  localStorage.setItem(CACHE_KEY, JSON.stringify({ time: Date.now(), articles }));
+}
+
+// --- Fetching All ---
+async function fetchAllFeeds() {
+  const cached = getCachedArticles();
+  if (cached) return cached;
+
+  const promises = [];
+  for (const [category, config] of Object.entries(FEEDS)) {
+    for (const source of config.sources) {
+      promises.push(fetchFeed(source, category));
+    }
+  }
+
+  const results = await Promise.allSettled(promises);
+  let articles = [];
+  for (const r of results) {
+    if (r.status === 'fulfilled') articles.push(...r.value);
+  }
+
+  // Deduplicate by title similarity
+  const seen = new Set();
+  articles = articles.filter(a => {
+    const key = a.title.toLowerCase().slice(0, 60);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+
+  // Sort by date
+  articles.sort((a, b) => b.pubDate - a.pubDate);
+
+  // Apply personalization weights
+  const weights = getCategoryWeights();
+  if (weights) {
+    articles = applyWeights(articles, weights);
+  }
+
+  articles = articles.slice(0, MAX_ARTICLES);
+  cacheArticles(articles);
+  return articles;
+}
+
+function applyWeights(articles, weights) {
+  // Score each article based on category weight and recency
+  const now = Date.now();
+  return articles.map(a => {
+    const recency = Math.max(0, 1 - (now - a.pubDate.getTime()) / (7 * 24 * 60 * 60 * 1000)); // decay over 7 days
+    const catWeight = weights[a.category] || 0.1;
+    a._score = catWeight * 0.6 + recency * 0.4;
+    return a;
+  }).sort((a, b) => b._score - a._score);
+}
+
+// --- Rendering ---
+function renderTabs(articles) {
+  const tabsEl = document.getElementById('tabs');
+  tabsEl.innerHTML = '';
+
+  const counts = { all: articles.length };
+  for (const a of articles) {
+    counts[a.category] = (counts[a.category] || 0) + 1;
+  }
+
+  const allTab = createTab('all', 'All', counts.all);
+  tabsEl.appendChild(allTab);
+
+  for (const [key, config] of Object.entries(FEEDS)) {
+    if (counts[key]) {
+      tabsEl.appendChild(createTab(key, config.name, counts[key]));
+    }
+  }
+}
+
+function createTab(key, name, count) {
+  const tab = document.createElement('div');
+  tab.className = `tab${activeCategory === key ? ' active' : ''}`;
+  tab.innerHTML = `${esc(name)}<span class="count">${count}</span>`;
+  tab.addEventListener('click', () => {
+    activeCategory = key;
+    renderTabs(allArticles);
+    renderFeed(allArticles);
+  });
+  return tab;
+}
+
+function renderFeed(articles) {
+  const feed = document.getElementById('feed');
+  feed.innerHTML = '';
+
+  const filtered = activeCategory === 'all'
+    ? articles
+    : articles.filter(a => a.category === activeCategory);
+
+  if (filtered.length === 0) {
+    feed.innerHTML = '<div class="empty-state">No articles found for this category.</div>';
+    return;
+  }
+
+  filtered.forEach((article, i) => {
+    const el = document.createElement('a');
+    el.className = 'article';
+    el.href = article.link;
+    el.target = '_blank';
+    el.rel = 'noopener noreferrer';
+    el.innerHTML = `
+      <div class="article-meta">
+        <span class="article-category ${esc(article.categoryClass)}">${esc(article.categoryName)}</span>
+        <span class="article-source">${esc(article.source)}</span>
+        <span class="article-time">${esc(relativeTime(article.pubDate))}</span>
+      </div>
+      <div class="article-title">${esc(article.title)}</div>
+      ${article.tldr ? `<div class="article-tldr"><span class="tldr-label">TLDR</span>${esc(article.tldr)}</div>` : ''}
+    `;
+
+    el.addEventListener('click', () => trackClick(article.category));
+
+    feed.appendChild(el);
+    setTimeout(() => el.classList.add('visible'), i * 40);
+  });
+}
+
+function esc(str) {
+  if (!str) return '';
+  return str
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+
+function updateTimestamp() {
+  const el = document.getElementById('last-updated');
+  const now = new Date();
+  const h = now.getHours() % 12 || 12;
+  const m = String(now.getMinutes()).padStart(2, '0');
+  const ampm = now.getHours() >= 12 ? 'pm' : 'am';
+  el.textContent = `Updated ${h}:${m} ${ampm}`;
+}
+
+// --- Init ---
+async function init() {
+  try {
+    allArticles = await fetchAllFeeds();
+    renderTabs(allArticles);
+    renderFeed(allArticles);
+    updateTimestamp();
+  } catch {
+    document.getElementById('feed').innerHTML =
+      '<div class="error-state">Failed to load feeds. Will retry shortly.</div>';
+  }
+}
+
+async function refresh() {
+  localStorage.removeItem(CACHE_KEY);
+  await init();
+}
+
+init();
+setInterval(refresh, REFRESH_INTERVAL);
+</script>
+</body>
+</html>
