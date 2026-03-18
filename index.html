@@ -195,6 +195,17 @@
   .cat-gaming { color: #6ec07a; }
   .cat-technology { color: #c08a6e; }
   .cat-startups { color: #c07eb8; }
+  .cat-current { color: #d0c07e; }
+
+  .tab-special {
+    color: #7eb8d0;
+    font-style: italic;
+  }
+
+  .tab-special.active {
+    color: #a0d0e8;
+    border-bottom-color: #a0d0e8;
+  }
 
   .article-source {
     font-family: 'Inter', sans-serif;
@@ -509,6 +520,16 @@
 
 <script>
 const FEEDS = {
+  current: {
+    name: 'Current Events',
+    class: 'cat-current',
+    sources: [
+      { name: 'AP News', url: 'https://rsshub.app/apnews/topics/apf-topnews' },
+      { name: 'Reuters', url: 'https://rsshub.app/reuters/world' },
+      { name: 'BBC', url: 'https://feeds.bbci.co.uk/news/rss.xml' },
+      { name: 'NPR', url: 'https://feeds.npr.org/1001/rss.xml' }
+    ]
+  },
   ai: {
     name: 'AI',
     class: 'cat-ai',
@@ -834,6 +855,102 @@ function applyWeights(articles, weights) {
   }).sort((a, b) => b._score - a._score);
 }
 
+// --- For You: articles from categories you engage with most ---
+function getForYouArticles(articles) {
+  const prefs = getPrefs();
+  const clicks = prefs.clicks || {};
+  const votes = prefs.votes || {};
+
+  // Score each category by engagement
+  const catScores = {};
+  const categories = Object.keys(FEEDS);
+
+  categories.forEach(cat => {
+    const clickScore = clicks[cat] || 0;
+    const v = votes[cat] || { up: 0, down: 0 };
+    catScores[cat] = clickScore * 1 + (v.up || 0) * 3 - (v.down || 0) * 5;
+  });
+
+  // Get total engagement
+  const totalScore = Object.values(catScores).reduce((a, b) => a + Math.max(0, b), 0);
+  if (totalScore < 3) {
+    // Not enough data — return top articles by recency
+    return articles.slice(0, 15);
+  }
+
+  // Get top categories (positive scores only)
+  const topCats = categories
+    .filter(c => catScores[c] > 0)
+    .sort((a, b) => catScores[b] - catScores[a]);
+
+  if (topCats.length === 0) return articles.slice(0, 15);
+
+  // Also factor in source-level preferences
+  const sourceVotes = prefs.sourceVotes || {};
+
+  const now = Date.now();
+  const scored = articles
+    .filter(a => topCats.includes(a.category))
+    .map(a => {
+      const recency = Math.max(0, 1 - (now - a.pubDate.getTime()) / (3 * 24 * 60 * 60 * 1000));
+      const catRank = 1 - (topCats.indexOf(a.category) / topCats.length);
+      const sv = sourceVotes[a.source] || { up: 0, down: 0 };
+      const sourceBoost = ((sv.up || 0) - (sv.down || 0) * 2) * 0.1;
+      a._fyScore = catRank * 0.4 + recency * 0.4 + Math.max(-0.2, sourceBoost) + 0.2;
+      return a;
+    })
+    .sort((a, b) => b._fyScore - a._fyScore);
+
+  return scored.slice(0, 20);
+}
+
+// --- Discovery: articles from categories you don't usually engage with ---
+function getDiscoveryArticles(articles) {
+  const prefs = getPrefs();
+  const clicks = prefs.clicks || {};
+  const votes = prefs.votes || {};
+
+  const categories = Object.keys(FEEDS);
+
+  // Score each category by engagement (same as For You)
+  const catScores = {};
+  categories.forEach(cat => {
+    const clickScore = clicks[cat] || 0;
+    const v = votes[cat] || { up: 0, down: 0 };
+    catScores[cat] = clickScore * 1 + (v.up || 0) * 3 - (v.down || 0) * 5;
+  });
+
+  const totalEngagement = Object.values(catScores).reduce((a, b) => a + Math.max(0, b), 0);
+
+  // Discovery targets: categories with low or no engagement
+  // But NOT categories that have been actively downvoted
+  const discoveryCats = categories.filter(cat => {
+    const v = votes[cat] || { up: 0, down: 0 };
+    const activelyRejected = (v.down || 0) > 2 && (v.down || 0) > (v.up || 0) * 2;
+    return !activelyRejected && catScores[cat] < (totalEngagement / categories.length);
+  });
+
+  if (discoveryCats.length === 0) {
+    // User engages with everything — show random mix
+    const shuffled = [...articles].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, 10);
+  }
+
+  // Get articles from discovery categories, prioritize recency
+  const now = Date.now();
+  const discoveryPool = articles
+    .filter(a => discoveryCats.includes(a.category))
+    .map(a => {
+      const recency = Math.max(0, 1 - (now - a.pubDate.getTime()) / (3 * 24 * 60 * 60 * 1000));
+      // Add slight randomness so it feels fresh each time
+      a._discScore = recency * 0.6 + Math.random() * 0.4;
+      return a;
+    })
+    .sort((a, b) => b._discScore - a._discScore);
+
+  return discoveryPool.slice(0, 12);
+}
+
 // --- Rendering ---
 function renderTabs(articles) {
   const tabsEl = document.getElementById('tabs');
@@ -847,6 +964,18 @@ function renderTabs(articles) {
   const allTab = createTab('all', 'All', counts.all);
   tabsEl.appendChild(allTab);
 
+  // For You tab
+  const forYouArticles = getForYouArticles(articles);
+  if (forYouArticles.length > 0) {
+    tabsEl.appendChild(createTab('foryou', 'For You', forYouArticles.length, true));
+  }
+
+  // Discovery tab
+  const discoveryArticles = getDiscoveryArticles(articles);
+  if (discoveryArticles.length > 0) {
+    tabsEl.appendChild(createTab('discovery', 'Discovery', discoveryArticles.length, true));
+  }
+
   for (const [key, config] of Object.entries(FEEDS)) {
     if (counts[key]) {
       tabsEl.appendChild(createTab(key, config.name, counts[key]));
@@ -854,9 +983,9 @@ function renderTabs(articles) {
   }
 }
 
-function createTab(key, name, count) {
+function createTab(key, name, count, isSpecial) {
   const tab = document.createElement('div');
-  tab.className = `tab${activeCategory === key ? ' active' : ''}`;
+  tab.className = `tab${activeCategory === key ? ' active' : ''}${isSpecial ? ' tab-special' : ''}`;
   tab.innerHTML = `${esc(name)}<span class="count">${count}</span>`;
   tab.addEventListener('click', () => {
     activeCategory = key;
@@ -870,9 +999,16 @@ function renderFeed(articles) {
   const feed = document.getElementById('feed');
   feed.innerHTML = '';
 
-  const filtered = activeCategory === 'all'
-    ? articles
-    : articles.filter(a => a.category === activeCategory);
+  let filtered;
+  if (activeCategory === 'all') {
+    filtered = articles;
+  } else if (activeCategory === 'foryou') {
+    filtered = getForYouArticles(articles);
+  } else if (activeCategory === 'discovery') {
+    filtered = getDiscoveryArticles(articles);
+  } else {
+    filtered = articles.filter(a => a.category === activeCategory);
+  }
 
   if (filtered.length === 0) {
     feed.innerHTML = '<div class="empty-state">No articles found for this category.</div>';
