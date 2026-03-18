@@ -242,6 +242,127 @@
     letter-spacing: 0.05em;
   }
 
+  .article-summary-label {
+    font-family: 'Inter', sans-serif;
+    font-weight: 500;
+    font-size: 0.6rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #7eb8d0;
+    margin-bottom: 0.5rem;
+  }
+
+  .article-summary {
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    font-size: 0.82rem;
+    line-height: 1.7;
+    color: #c8c3bc;
+    margin-bottom: 0.75rem;
+    white-space: pre-wrap;
+  }
+
+  .article-raw-label {
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    font-size: 0.55rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #5a5650;
+    cursor: pointer;
+    margin-bottom: 0.4rem;
+    transition: color 0.2s ease;
+  }
+
+  .article-raw-label:hover { color: #8a857e; }
+
+  .article-raw {
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    font-size: 0.75rem;
+    line-height: 1.6;
+    color: #8a857e;
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease;
+    white-space: pre-wrap;
+  }
+
+  .article-raw.show { max-height: 3000px; }
+
+  .article-ask {
+    display: flex;
+    gap: 0.5rem;
+    margin-top: 0.75rem;
+    align-items: center;
+  }
+
+  .article-ask-input {
+    flex: 1;
+    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    font-size: 0.78rem;
+    color: #e8e4df;
+    outline: none;
+    transition: border-color 0.2s ease;
+  }
+
+  .article-ask-input::placeholder { color: #5a5650; }
+  .article-ask-input:focus { border-color: rgba(126, 184, 208, 0.3); }
+
+  .article-ask-btn {
+    background: rgba(126, 184, 208, 0.12);
+    border: 1px solid rgba(126, 184, 208, 0.2);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    font-size: 0.65rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #7eb8d0;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    white-space: nowrap;
+  }
+
+  .article-ask-btn:hover { background: rgba(126, 184, 208, 0.2); }
+  .article-ask-btn:disabled { opacity: 0.4; cursor: default; }
+
+  .article-thread {
+    margin-top: 0.75rem;
+  }
+
+  .thread-q {
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    font-size: 0.75rem;
+    color: #7eb8d0;
+    margin-bottom: 0.3rem;
+  }
+
+  .thread-a {
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    font-size: 0.8rem;
+    line-height: 1.65;
+    color: #c8c3bc;
+    margin-bottom: 0.75rem;
+    white-space: pre-wrap;
+  }
+
+  .thread-loading {
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    font-size: 0.75rem;
+    color: #6b6660;
+    margin-bottom: 0.75rem;
+  }
+
   .article-read-more {
     display: inline-block;
     font-family: 'Inter', sans-serif;
@@ -251,7 +372,7 @@
     text-transform: uppercase;
     color: #7eb8d0;
     text-decoration: none;
-    margin-top: 0.75rem;
+    margin-top: 0.5rem;
     transition: color 0.2s ease;
   }
 
@@ -691,21 +812,110 @@ async function loadFullArticle(articleUrl, el) {
     if (!res.ok) throw new Error('Failed to fetch');
     const data = await res.json();
 
-    const content = data.content || 'Could not extract article content.';
-    expandEl.innerHTML = `
-      <div class="article-content">${esc(content)}</div>
-      <div style="padding-left:1.6rem;padding-bottom:0.5rem">
-        <a class="article-read-more" href="${esc(articleUrl)}" target="_blank" rel="noopener noreferrer">Read on source →</a>
-      </div>
-    `;
+    const content = data.content || '';
+    const summary = data.summary || '';
+    const articleId = btoa(articleUrl).slice(0, 16);
+
+    // Store article content for follow-up questions
+    el.dataset.articleContent = content;
+    el.dataset.articleId = articleId;
+
+    let html = '<div style="padding: 0.75rem 0 0.5rem 1.6rem">';
+
+    if (summary) {
+      html += `<div class="article-summary-label">AI Summary</div>`;
+      html += `<div class="article-summary">${esc(summary)}</div>`;
+    }
+
+    if (content && content !== 'Could not extract article content.') {
+      html += `<div class="article-raw-label" onclick="this.nextElementSibling.classList.toggle('show')">▸ View original text</div>`;
+      html += `<div class="article-raw">${esc(content)}</div>`;
+    }
+
+    // Follow-up input
+    html += `<div class="article-ask">
+      <input class="article-ask-input" id="ask-${articleId}" placeholder="Ask a follow-up..." onkeydown="if(event.key==='Enter')askFollowUp('${articleId}',this.closest('.article'))">
+      <button class="article-ask-btn" onclick="askFollowUp('${articleId}',this.closest('.article'))">Ask</button>
+    </div>`;
+
+    // Thread container for Q&A
+    html += `<div class="article-thread" id="thread-${articleId}"></div>`;
+
+    html += `<a class="article-read-more" href="${esc(articleUrl)}" target="_blank" rel="noopener noreferrer">Read on source →</a>`;
+    html += '</div>';
+
+    expandEl.innerHTML = html;
   } catch {
     expandEl.innerHTML = `
-      <div class="article-content">Could not load article.</div>
-      <div style="padding-left:1.6rem;padding-bottom:0.5rem">
+      <div style="padding: 0.75rem 0 0.5rem 1.6rem">
+        <div class="article-content">Could not load article.</div>
         <a class="article-read-more" href="${esc(articleUrl)}" target="_blank" rel="noopener noreferrer">Read on source →</a>
       </div>
     `;
   }
+}
+
+// Conversation history per article
+const conversations = {};
+
+async function askFollowUp(articleId, articleEl) {
+  const input = document.getElementById(`ask-${articleId}`);
+  const thread = document.getElementById(`thread-${articleId}`);
+  const question = input.value.trim();
+  if (!question) return;
+
+  const articleContent = articleEl.dataset.articleContent;
+  if (!articleContent) return;
+
+  // Initialize conversation history
+  if (!conversations[articleId]) conversations[articleId] = [];
+
+  // Show question and loading
+  input.value = '';
+  thread.innerHTML += `<div class="thread-q">${esc(question)}</div>`;
+  thread.innerHTML += `<div class="thread-loading" id="loading-${articleId}">Thinking...</div>`;
+
+  // Disable input while loading
+  const btn = articleEl.querySelector('.article-ask-btn');
+  input.disabled = true;
+  if (btn) btn.disabled = true;
+
+  try {
+    const res = await fetch(`${CORS_PROXY}/?mode=ask`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        question,
+        articleContent,
+        conversationHistory: conversations[articleId],
+      }),
+    });
+
+    const data = await res.json();
+    const answer = data.answer || 'Could not generate a response.';
+
+    // Store in conversation history
+    conversations[articleId].push({ question, answer });
+
+    // Replace loading with answer
+    const loadingEl = document.getElementById(`loading-${articleId}`);
+    if (loadingEl) {
+      loadingEl.className = 'thread-a';
+      loadingEl.id = '';
+      loadingEl.textContent = answer;
+    }
+  } catch {
+    const loadingEl = document.getElementById(`loading-${articleId}`);
+    if (loadingEl) {
+      loadingEl.className = 'thread-a';
+      loadingEl.id = '';
+      loadingEl.textContent = 'Failed to get a response. Try again.';
+    }
+  }
+
+  input.disabled = false;
+  if (btn) btn.disabled = false;
+  input.focus();
 }
 
 function esc(str) {
