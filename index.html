@@ -460,7 +460,7 @@ function relativeTime(date) {
 function getCachedArticles() {
   try {
     const cached = JSON.parse(localStorage.getItem(CACHE_KEY));
-    if (cached && Date.now() - cached.time < CACHE_TTL) {
+    if (cached && cached.articles && cached.articles.length > 0 && Date.now() - cached.time < CACHE_TTL) {
       return cached.articles.map(a => ({ ...a, pubDate: new Date(a.pubDate) }));
     }
   } catch {}
@@ -620,13 +620,19 @@ async function init() {
     const testItems = parseRSS(testXml);
 
     if (testItems.length === 0) {
-      feedEl.innerHTML = `<div class="error-state">Debug: Proxy returned ${testRes.status}, XML length: ${testXml.length}, starts with: ${testXml.slice(0,100).replace(/</g,'&lt;')}</div>`;
+      // Show debug info
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(testXml, 'text/xml');
+      const hasError = doc.querySelector('parsererror') ? 'YES' : 'NO';
+      const itemCount = doc.querySelectorAll('item').length;
+      const entryCount = doc.querySelectorAll('entry').length;
+      feedEl.innerHTML = `<div class="error-state">Debug: Status=${testRes.status}, XML len=${testXml.length}, parseError=${hasError}, items=${itemCount}, entries=${entryCount}, first100: ${testXml.slice(0,100).replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`;
       return;
     }
 
     allArticles = await fetchAllFeeds();
     if (allArticles.length === 0) {
-      feedEl.innerHTML = '<div class="error-state">Feeds fetched but no articles parsed.</div>';
+      feedEl.innerHTML = `<div class="error-state">Debug: test feed parsed ${testItems.length} items but fetchAllFeeds returned 0.</div>`;
       return;
     }
     renderTabs(allArticles);
