@@ -46,11 +46,12 @@
 
   .ascii-accent {
     font-family: 'Courier New', monospace;
-    font-size: 0.6rem;
-    line-height: 1.1;
-    color: #3a3530;
+    font-size: 1.1rem;
+    line-height: 1;
+    color: #4a4540;
     white-space: pre;
     user-select: none;
+    letter-spacing: -0.05em;
   }
 
   .label {
@@ -388,6 +389,38 @@
     margin-bottom: 0.75rem;
   }
 
+  .article-vote {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    margin-left: auto;
+  }
+
+  .vote-btn {
+    background: none;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 4px;
+    padding: 0.3rem 0.45rem;
+    cursor: pointer;
+    font-size: 0.7rem;
+    line-height: 1;
+    color: #5a5650;
+    transition: all 0.2s ease;
+  }
+
+  .vote-btn:hover { border-color: rgba(255, 255, 255, 0.12); color: #8a857e; }
+  .vote-btn.voted-up { border-color: rgba(110, 192, 122, 0.3); color: #6ec07a; background: rgba(110, 192, 122, 0.06); }
+  .vote-btn.voted-down { border-color: rgba(192, 110, 110, 0.3); color: #c06e6e; background: rgba(192, 110, 110, 0.06); }
+  .vote-btn:disabled { cursor: default; }
+
+  .article-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 0.5rem;
+    padding-left: 1.6rem;
+  }
+
   .article-read-more {
     display: inline-block;
     font-family: 'Inter', sans-serif;
@@ -441,10 +474,8 @@
 <div class="container">
   <div class="header">
     <div class="header-left">
-      <div class="ascii-accent">┌──┐
-│▓▒│
-│░▒│
-└──┘</div>
+      <div class="ascii-accent">▚▞
+▞▚</div>
       <div class="label">News Feed</div>
     </div>
     <div class="last-updated" id="last-updated"></div>
@@ -538,20 +569,56 @@ function trackClick(category) {
   savePrefs(prefs);
 }
 
+function trackVote(category, source, direction, isActive) {
+  const prefs = getPrefs();
+  if (!prefs.votes) prefs.votes = {};
+  if (!prefs.sourceVotes) prefs.sourceVotes = {};
+
+  // Category-level signal
+  if (!prefs.votes[category]) prefs.votes[category] = { up: 0, down: 0 };
+  if (isActive) {
+    prefs.votes[category][direction]++;
+  } else {
+    prefs.votes[category][direction] = Math.max(0, prefs.votes[category][direction] - 1);
+  }
+
+  // Source-level signal
+  if (!prefs.sourceVotes[source]) prefs.sourceVotes[source] = { up: 0, down: 0 };
+  if (isActive) {
+    prefs.sourceVotes[source][direction]++;
+  } else {
+    prefs.sourceVotes[source][direction] = Math.max(0, prefs.sourceVotes[source][direction] - 1);
+  }
+
+  savePrefs(prefs);
+}
+
 function getCategoryWeights() {
   const prefs = getPrefs();
   const clicks = prefs.clicks || {};
-  const total = Object.values(clicks).reduce((a, b) => a + b, 0);
-  if (total < 5) return null; // need at least 5 clicks before personalizing
+  const votes = prefs.votes || {};
+
+  // Combined signal: clicks + votes
+  const totalClicks = Object.values(clicks).reduce((a, b) => a + b, 0);
+  const totalVotes = Object.values(votes).reduce((a, v) => a + (v.up || 0) + (v.down || 0), 0);
+
+  if (totalClicks + totalVotes < 3) return null;
 
   const weights = {};
   const categories = Object.keys(FEEDS);
   const base = 1 / categories.length;
 
   categories.forEach(cat => {
-    const ratio = (clicks[cat] || 0) / total;
-    // Blend: 60% preference, 40% equal distribution
-    weights[cat] = 0.4 * base + 0.6 * ratio;
+    const clickRatio = totalClicks > 0 ? (clicks[cat] || 0) / totalClicks : 0;
+
+    // Votes: thumbs up boosts, thumbs down suppresses
+    const catVotes = votes[cat] || { up: 0, down: 0 };
+    const voteSignal = totalVotes > 0
+      ? ((catVotes.up || 0) - (catVotes.down || 0) * 1.5) / totalVotes
+      : 0;
+
+    // Blend: 30% base, 35% clicks, 35% votes
+    weights[cat] = 0.3 * base + 0.35 * clickRatio + 0.35 * Math.max(0, base + voteSignal);
   });
 
   return weights;
@@ -804,6 +871,10 @@ function renderFeed(articles) {
           <span class="article-category ${esc(article.categoryClass)}">${esc(article.categoryName)}</span>
           <span class="article-source">${esc(article.source)}</span>
           <span class="article-time">${esc(relativeTime(article.pubDate))}</span>
+          <div class="article-vote">
+            <button class="vote-btn" data-vote="up" title="More like this">&#9650;</button>
+            <button class="vote-btn" data-vote="down" title="Less like this">&#9660;</button>
+          </div>
         </div>
         <div class="article-title-row">
           ${caretSVG}
@@ -822,6 +893,8 @@ function renderFeed(articles) {
 
     const header = el.querySelector('.article-header');
     header.addEventListener('click', (e) => {
+      // Don't toggle if clicking vote buttons
+      if (e.target.closest('.vote-btn')) return;
       e.preventDefault();
       const isExpanding = !el.classList.contains('expanded');
       el.classList.toggle('expanded');
@@ -832,6 +905,24 @@ function renderFeed(articles) {
         loaded = true;
         loadFullArticle(article.link, el);
       }
+    });
+
+    // Vote buttons
+    el.querySelectorAll('.vote-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const vote = btn.dataset.vote;
+        const siblingVote = vote === 'up' ? 'down' : 'up';
+        const sibling = el.querySelector(`.vote-btn[data-vote="${siblingVote}"]`);
+
+        // Toggle vote
+        const isActive = btn.classList.contains(`voted-${vote}`);
+        btn.classList.toggle(`voted-${vote}`);
+        if (sibling) sibling.classList.remove(`voted-${siblingVote}`);
+
+        // Track preference
+        trackVote(article.category, article.source, vote, !isActive);
+      });
     });
 
     feed.appendChild(el);
@@ -892,7 +983,9 @@ async function loadFullArticle(articleUrl, el) {
     // Thread container for Q&A
     html += `<div class="article-thread" id="thread-${articleId}"></div>`;
 
-    html += `<a class="article-read-more" href="${esc(articleUrl)}" target="_blank" rel="noopener noreferrer">Read on source →</a>`;
+    html += `<div class="article-footer">
+      <a class="article-read-more" href="${esc(articleUrl)}" target="_blank" rel="noopener noreferrer">Read on source →</a>
+    </div>`;
     html += '</div>';
 
     expandEl.innerHTML = html;
