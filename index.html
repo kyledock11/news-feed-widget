@@ -218,8 +218,9 @@
   }
 
   .article.expanded .article-expand {
-    max-height: 600px;
+    max-height: 5000px;
     opacity: 1;
+    transition: max-height 0.5s ease, opacity 0.3s ease;
   }
 
   .article-content {
@@ -229,6 +230,16 @@
     line-height: 1.7;
     color: #b0aba5;
     padding: 0.75rem 0 0.5rem 1.6rem;
+    white-space: pre-wrap;
+  }
+
+  .article-content-loading {
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    font-size: 0.75rem;
+    color: #6b6660;
+    padding: 0.75rem 0 0.5rem 1.6rem;
+    letter-spacing: 0.05em;
   }
 
   .article-read-more {
@@ -240,7 +251,7 @@
     text-transform: uppercase;
     color: #7eb8d0;
     text-decoration: none;
-    margin-top: 0.5rem;
+    margin-top: 0.75rem;
     transition: color 0.2s ease;
   }
 
@@ -633,9 +644,7 @@ function renderFeed(articles) {
   filtered.forEach((article, i) => {
     const el = document.createElement('div');
     el.className = 'article';
-
-    const contentText = article.fullContent && article.fullContent.length > article.tldr.length
-      ? article.fullContent : article.tldr;
+    let loaded = false;
 
     el.innerHTML = `
       <div class="article-header">
@@ -651,23 +660,52 @@ function renderFeed(articles) {
         ${article.tldr ? `<div class="article-tldr" style="padding-left:1.6rem"><span class="tldr-label">TLDR</span>${esc(article.tldr)}</div>` : ''}
       </div>
       <div class="article-expand">
-        <div class="article-content">
-          ${esc(contentText)}
-          <br><a class="article-read-more" href="${esc(article.link)}" target="_blank" rel="noopener noreferrer">Read full article →</a>
-        </div>
+        <div class="article-content-loading">Loading article...</div>
       </div>
     `;
 
     const header = el.querySelector('.article-header');
     header.addEventListener('click', (e) => {
       e.preventDefault();
+      const isExpanding = !el.classList.contains('expanded');
       el.classList.toggle('expanded');
       trackClick(article.category);
+
+      // Lazy load full article on first expand
+      if (isExpanding && !loaded) {
+        loaded = true;
+        loadFullArticle(article.link, el);
+      }
     });
 
     feed.appendChild(el);
     setTimeout(() => el.classList.add('visible'), i * 40);
   });
+}
+
+async function loadFullArticle(articleUrl, el) {
+  const expandEl = el.querySelector('.article-expand');
+  try {
+    const extractUrl = `${CORS_PROXY}/?mode=extract&url=${encodeURIComponent(articleUrl)}`;
+    const res = await fetch(extractUrl);
+    if (!res.ok) throw new Error('Failed to fetch');
+    const data = await res.json();
+
+    const content = data.content || 'Could not extract article content.';
+    expandEl.innerHTML = `
+      <div class="article-content">${esc(content)}</div>
+      <div style="padding-left:1.6rem;padding-bottom:0.5rem">
+        <a class="article-read-more" href="${esc(articleUrl)}" target="_blank" rel="noopener noreferrer">Read on source →</a>
+      </div>
+    `;
+  } catch {
+    expandEl.innerHTML = `
+      <div class="article-content">Could not load article.</div>
+      <div style="padding-left:1.6rem;padding-bottom:0.5rem">
+        <a class="article-read-more" href="${esc(articleUrl)}" target="_blank" rel="noopener noreferrer">Read on source →</a>
+      </div>
+    `;
+  }
 }
 
 function esc(str) {
