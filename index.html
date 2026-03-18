@@ -336,8 +336,11 @@ function getCategoryWeights() {
 }
 
 // --- RSS Fetching ---
+const CORS_PROXY = 'https://cors-proxy.kyle-d7d.workers.dev';
+
 async function fetchFeed(source, category) {
-  const proxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(source.url)}`;
+  const rss2jsonUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(source.url)}`;
+  const proxyUrl = `${CORS_PROXY}/?url=${encodeURIComponent(rss2jsonUrl)}`;
 
   try {
     const res = await fetch(proxyUrl);
