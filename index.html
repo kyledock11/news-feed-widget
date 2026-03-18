@@ -785,6 +785,10 @@ function renderFeed(articles) {
       </div>
     `;
 
+    // Store article metadata on element for fallback context
+    el.dataset.articleTitle = article.title;
+    el.dataset.articleTldr = article.tldr || '';
+
     const header = el.querySelector('.article-header');
     header.addEventListener('click', (e) => {
       e.preventDefault();
@@ -812,9 +816,16 @@ async function loadFullArticle(articleUrl, el) {
     if (!res.ok) throw new Error('Failed to fetch');
     const data = await res.json();
 
-    const content = data.content || '';
+    let content = data.content || '';
     const summary = data.summary || '';
     const articleId = btoa(articleUrl).slice(0, 16);
+
+    // If extraction failed or content is too short, use title + TLDR + summary as context
+    const title = el.dataset.articleTitle || '';
+    const tldr = el.dataset.articleTldr || '';
+    if (!content || content === 'Could not extract article content.' || content.length < 100) {
+      content = `Title: ${title}\n\nSummary: ${tldr}\n\n${summary ? 'AI Summary: ' + summary : ''}`;
+    }
 
     // Store article content for follow-up questions
     el.dataset.articleContent = content;
@@ -864,8 +875,14 @@ async function askFollowUp(articleId, articleEl) {
   const question = input.value.trim();
   if (!question) return;
 
-  const articleContent = articleEl.dataset.articleContent;
-  if (!articleContent) return;
+  let articleContent = articleEl.dataset.articleContent || '';
+  // Fallback: use title + TLDR if no content
+  if (!articleContent || articleContent.length < 50) {
+    const title = articleEl.dataset.articleTitle || '';
+    const tldr = articleEl.dataset.articleTldr || '';
+    articleContent = `Title: ${title}\nSummary: ${tldr}`;
+  }
+  if (!articleContent || articleContent.length < 10) return;
 
   // Initialize conversation history
   if (!conversations[articleId]) conversations[articleId] = [];
