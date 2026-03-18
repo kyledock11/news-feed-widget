@@ -342,29 +342,47 @@ function parseRSS(xml) {
   const parser = new DOMParser();
   const doc = parser.parseFromString(xml, 'text/xml');
 
-  // Try RSS 2.0 format
-  let items = doc.querySelectorAll('item');
-  if (items.length === 0) {
-    // Try Atom format
-    items = doc.querySelectorAll('entry');
+  // Check for parse errors
+  if (doc.querySelector('parsererror')) return [];
+
+  // Try RSS 2.0 format first, then Atom
+  let items = Array.from(doc.querySelectorAll('item'));
+  const isAtom = items.length === 0;
+  if (isAtom) {
+    items = Array.from(doc.querySelectorAll('entry'));
   }
 
   const results = [];
-  items.forEach(item => {
-    const title = item.querySelector('title')?.textContent || '';
-    const link = item.querySelector('link')?.textContent
-      || item.querySelector('link')?.getAttribute('href') || '';
-    const description = item.querySelector('description')?.textContent
-      || item.querySelector('summary')?.textContent
-      || item.querySelector('content')?.textContent || '';
-    const pubDate = item.querySelector('pubDate')?.textContent
-      || item.querySelector('published')?.textContent
-      || item.querySelector('updated')?.textContent || '';
+  for (const item of items) {
+    // Title — handle CDATA
+    const titleEl = item.querySelector('title');
+    const title = titleEl ? titleEl.textContent.trim() : '';
+
+    // Link — RSS uses <link>text</link>, Atom uses <link href="..."/>
+    let link = '';
+    const linkEls = item.querySelectorAll('link');
+    for (const l of linkEls) {
+      const href = l.getAttribute('href');
+      if (href) { link = href; break; }
+      if (l.textContent.trim()) { link = l.textContent.trim(); break; }
+    }
+
+    // Description
+    const descEl = item.querySelector('description')
+      || item.querySelector('summary')
+      || item.querySelector('content');
+    const description = descEl ? descEl.textContent.trim() : '';
+
+    // Date
+    const dateEl = item.querySelector('pubDate')
+      || item.querySelector('published')
+      || item.querySelector('updated');
+    const pubDate = dateEl ? dateEl.textContent.trim() : '';
 
     if (title) {
       results.push({ title, link, description, pubDate });
     }
-  });
+  }
 
   return results;
 }
@@ -593,19 +611,29 @@ function updateTimestamp() {
 
 // --- Init ---
 async function init() {
+  const feedEl = document.getElementById('feed');
   try {
+    // Debug: test a single feed first
+    const testUrl = `${CORS_PROXY}/?url=${encodeURIComponent('https://hnrss.org/frontpage')}`;
+    const testRes = await fetch(testUrl);
+    const testXml = await testRes.text();
+    const testItems = parseRSS(testXml);
+
+    if (testItems.length === 0) {
+      feedEl.innerHTML = `<div class="error-state">Debug: Proxy returned ${testRes.status}, XML length: ${testXml.length}, starts with: ${testXml.slice(0,100).replace(/</g,'&lt;')}</div>`;
+      return;
+    }
+
     allArticles = await fetchAllFeeds();
     if (allArticles.length === 0) {
-      document.getElementById('feed').innerHTML =
-        '<div class="error-state">No articles loaded. RSS proxy may be rate-limited — will retry in 15 min.</div>';
+      feedEl.innerHTML = '<div class="error-state">Feeds fetched but no articles parsed.</div>';
       return;
     }
     renderTabs(allArticles);
     renderFeed(allArticles);
     updateTimestamp();
   } catch (err) {
-    document.getElementById('feed').innerHTML =
-      '<div class="error-state">Failed to load feeds. Will retry shortly.</div>';
+    feedEl.innerHTML = `<div class="error-state">Error: ${err.message}</div>`;
   }
 }
 
