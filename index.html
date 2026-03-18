@@ -25,8 +25,7 @@
   * { scrollbar-width: thin; scrollbar-color: #2a2725 #191919; }
 
   .container {
-    max-width: 720px;
-    margin: 0 auto;
+    width: 100%;
     padding: 1.25rem 1.5rem;
     border: 1px solid rgba(255, 255, 255, 0.06);
     border-radius: 8px;
@@ -338,14 +337,15 @@ function getCategoryWeights() {
 
 // --- RSS Fetching ---
 async function fetchFeed(source, category) {
-  const proxy = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(source.url)}&count=8`;
+  const proxyUrl = `https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(source.url)}`;
+
   try {
-    const res = await fetch(proxy);
+    const res = await fetch(proxyUrl);
     if (!res.ok) return [];
     const data = await res.json();
     if (data.status !== 'ok' || !data.items) return [];
 
-    return data.items.map(item => ({
+    return data.items.slice(0, 8).map(item => ({
       title: cleanText(item.title || ''),
       tldr: makeTLDR(item.description || item.content || ''),
       link: item.link || '#',
@@ -562,10 +562,15 @@ function updateTimestamp() {
 async function init() {
   try {
     allArticles = await fetchAllFeeds();
+    if (allArticles.length === 0) {
+      document.getElementById('feed').innerHTML =
+        '<div class="error-state">No articles loaded. RSS proxy may be rate-limited — will retry in 15 min.</div>';
+      return;
+    }
     renderTabs(allArticles);
     renderFeed(allArticles);
     updateTimestamp();
-  } catch {
+  } catch (err) {
     document.getElementById('feed').innerHTML =
       '<div class="error-state">Failed to load feeds. Will retry shortly.</div>';
   }
