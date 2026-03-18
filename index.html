@@ -591,7 +591,23 @@ const REFRESH_INTERVAL = 15 * 60 * 1000; // 15 min
 
 let allArticles = [];
 let activeCategory = 'all';
-const dismissedTitles = new Set();
+const DISMISSED_KEY = 'newsfeed_dismissed';
+
+function getDismissed() {
+  try { return new Set(JSON.parse(localStorage.getItem(DISMISSED_KEY)) || []); }
+  catch { return new Set(); }
+}
+
+function saveDismissed(set) {
+  // Keep only last 200 to avoid bloat
+  const arr = [...set].slice(-200);
+  localStorage.setItem(DISMISSED_KEY, JSON.stringify(arr));
+}
+
+function getVisibleArticles() {
+  const dismissed = getDismissed();
+  return allArticles.filter(a => !dismissed.has(a.title));
+}
 
 // --- Personalization ---
 function getPrefs() {
@@ -990,8 +1006,9 @@ function createTab(key, name, count, isSpecial) {
   tab.innerHTML = `${esc(name)}<span class="count">${count}</span>`;
   tab.addEventListener('click', () => {
     activeCategory = key;
-    renderTabs(allArticles);
-    renderFeed(allArticles);
+    const visible = getVisibleArticles();
+    renderTabs(visible);
+    renderFeed(visible);
   });
   return tab;
 }
@@ -1088,13 +1105,14 @@ function renderFeed(articles) {
             nextSibling.style.display = 'none';
           }
           el.classList.add('dismissed');
-          dismissedTitles.add(article.title);
 
-          // Update tab counts with dismissed articles filtered out
-          setTimeout(() => {
-            const visibleArticles = allArticles.filter(a => !dismissedTitles.has(a.title));
-            renderTabs(visibleArticles);
-          }, 400);
+          // Persist dismissal
+          const dismissed = getDismissed();
+          dismissed.add(article.title);
+          saveDismissed(dismissed);
+
+          // Re-render tabs with updated counts
+          setTimeout(() => renderTabs(getVisibleArticles()), 400);
         }
       });
     });
@@ -1269,8 +1287,9 @@ async function init() {
         '<div class="error-state">No articles loaded. Will retry shortly.</div>';
       return;
     }
-    renderTabs(allArticles);
-    renderFeed(allArticles);
+    const visible = getVisibleArticles();
+    renderTabs(visible);
+    renderFeed(visible);
     updateTimestamp();
   } catch (err) {
     document.getElementById('feed').innerHTML =
