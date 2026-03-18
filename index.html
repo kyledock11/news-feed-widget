@@ -112,15 +112,19 @@
     opacity: 0;
     transform: translateY(4px);
     transition: opacity 0.4s ease, transform 0.4s ease;
-    cursor: pointer;
-    text-decoration: none;
-    display: block;
-    color: inherit;
   }
 
-  .article:hover { background: rgba(255, 255, 255, 0.02); margin: 0 -0.5rem; padding: 1rem 0.5rem; border-radius: 4px; }
   .article.visible { opacity: 1; transform: translateY(0); }
   .article:last-child { border-bottom: none; }
+
+  .article-header {
+    cursor: pointer;
+    padding: 0.25rem 0;
+    border-radius: 4px;
+    transition: background 0.15s ease;
+  }
+
+  .article-header:hover { background: rgba(255, 255, 255, 0.02); margin: 0 -0.5rem; padding: 0.25rem 0.5rem; }
 
   .article-meta {
     display: flex;
@@ -161,6 +165,24 @@
     color: #5a5650;
   }
 
+  .article-title-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+
+  .article-caret {
+    flex-shrink: 0;
+    width: 16px;
+    height: 16px;
+    margin-top: 0.35rem;
+    color: #5a5650;
+    transition: transform 0.2s ease, color 0.2s ease;
+  }
+
+  .article-header:hover .article-caret { color: #8a857e; }
+  .article.expanded .article-caret { transform: rotate(90deg); color: #a09a92; }
+
   .article-title {
     font-family: 'Cormorant Garamond', serif;
     font-weight: 600;
@@ -168,6 +190,7 @@
     line-height: 1.5;
     color: #f2efea;
     margin-bottom: 0.3rem;
+    flex: 1;
   }
 
   .article-tldr {
@@ -186,6 +209,42 @@
     color: #6b6660;
     margin-right: 0.3rem;
   }
+
+  .article-expand {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.3s ease, opacity 0.3s ease;
+    opacity: 0;
+  }
+
+  .article.expanded .article-expand {
+    max-height: 600px;
+    opacity: 1;
+  }
+
+  .article-content {
+    font-family: 'Inter', sans-serif;
+    font-weight: 300;
+    font-size: 0.82rem;
+    line-height: 1.7;
+    color: #b0aba5;
+    padding: 0.75rem 0 0.5rem 1.6rem;
+  }
+
+  .article-read-more {
+    display: inline-block;
+    font-family: 'Inter', sans-serif;
+    font-weight: 400;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: #7eb8d0;
+    text-decoration: none;
+    margin-top: 0.5rem;
+    transition: color 0.2s ease;
+  }
+
+  .article-read-more:hover { color: #a0d0e8; }
 
   /* States */
   .loading-state, .error-state, .empty-state {
@@ -399,6 +458,7 @@ async function fetchFeed(source, category) {
     return items.map(item => ({
       title: cleanText(item.title || ''),
       tldr: makeTLDR(item.description || ''),
+      fullContent: cleanText(item.description || ''),
       link: item.link || '#',
       source: source.name,
       category: category,
@@ -568,23 +628,42 @@ function renderFeed(articles) {
     return;
   }
 
+  const caretSVG = `<svg class="article-caret" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><polyline points="6 4 10 8 6 12"/></svg>`;
+
   filtered.forEach((article, i) => {
-    const el = document.createElement('a');
+    const el = document.createElement('div');
     el.className = 'article';
-    el.href = article.link;
-    el.target = '_blank';
-    el.rel = 'noopener noreferrer';
+
+    const contentText = article.fullContent && article.fullContent.length > article.tldr.length
+      ? article.fullContent : article.tldr;
+
     el.innerHTML = `
-      <div class="article-meta">
-        <span class="article-category ${esc(article.categoryClass)}">${esc(article.categoryName)}</span>
-        <span class="article-source">${esc(article.source)}</span>
-        <span class="article-time">${esc(relativeTime(article.pubDate))}</span>
+      <div class="article-header">
+        <div class="article-meta">
+          <span class="article-category ${esc(article.categoryClass)}">${esc(article.categoryName)}</span>
+          <span class="article-source">${esc(article.source)}</span>
+          <span class="article-time">${esc(relativeTime(article.pubDate))}</span>
+        </div>
+        <div class="article-title-row">
+          ${caretSVG}
+          <div class="article-title">${esc(article.title)}</div>
+        </div>
+        ${article.tldr ? `<div class="article-tldr" style="padding-left:1.6rem"><span class="tldr-label">TLDR</span>${esc(article.tldr)}</div>` : ''}
       </div>
-      <div class="article-title">${esc(article.title)}</div>
-      ${article.tldr ? `<div class="article-tldr"><span class="tldr-label">TLDR</span>${esc(article.tldr)}</div>` : ''}
+      <div class="article-expand">
+        <div class="article-content">
+          ${esc(contentText)}
+          <br><a class="article-read-more" href="${esc(article.link)}" target="_blank" rel="noopener noreferrer">Read full article →</a>
+        </div>
+      </div>
     `;
 
-    el.addEventListener('click', () => trackClick(article.category));
+    const header = el.querySelector('.article-header');
+    header.addEventListener('click', (e) => {
+      e.preventDefault();
+      el.classList.toggle('expanded');
+      trackClick(article.category);
+    });
 
     feed.appendChild(el);
     setTimeout(() => el.classList.add('visible'), i * 40);
@@ -611,35 +690,19 @@ function updateTimestamp() {
 
 // --- Init ---
 async function init() {
-  const feedEl = document.getElementById('feed');
   try {
-    // Debug: test a single feed first
-    const testUrl = `${CORS_PROXY}/?url=${encodeURIComponent('https://hnrss.org/frontpage')}`;
-    const testRes = await fetch(testUrl);
-    const testXml = await testRes.text();
-    const testItems = parseRSS(testXml);
-
-    if (testItems.length === 0) {
-      // Show debug info
-      const parser = new DOMParser();
-      const doc = parser.parseFromString(testXml, 'text/xml');
-      const hasError = doc.querySelector('parsererror') ? 'YES' : 'NO';
-      const itemCount = doc.querySelectorAll('item').length;
-      const entryCount = doc.querySelectorAll('entry').length;
-      feedEl.innerHTML = `<div class="error-state">Debug: Status=${testRes.status}, XML len=${testXml.length}, parseError=${hasError}, items=${itemCount}, entries=${entryCount}, first100: ${testXml.slice(0,100).replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>`;
-      return;
-    }
-
     allArticles = await fetchAllFeeds();
     if (allArticles.length === 0) {
-      feedEl.innerHTML = `<div class="error-state">Debug: test feed parsed ${testItems.length} items but fetchAllFeeds returned 0.</div>`;
+      document.getElementById('feed').innerHTML =
+        '<div class="error-state">No articles loaded. Will retry shortly.</div>';
       return;
     }
     renderTabs(allArticles);
     renderFeed(allArticles);
     updateTimestamp();
   } catch (err) {
-    feedEl.innerHTML = `<div class="error-state">Error: ${err.message}</div>`;
+    document.getElementById('feed').innerHTML =
+      '<div class="error-state">Failed to load feeds. Will retry shortly.</div>';
   }
 }
 
