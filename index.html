@@ -31,11 +31,21 @@
     border-radius: 8px;
   }
 
+  .sticky-top {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+    background: #191919;
+    padding-bottom: 0;
+  }
+
   .header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    margin-bottom: 1.25rem;
+    margin-bottom: 0;
+    padding-top: 0.25rem;
+    padding-bottom: 0.75rem;
   }
 
   .header-left {
@@ -75,7 +85,8 @@
   .tabs {
     display: flex;
     gap: 0;
-    margin-bottom: 1.25rem;
+    margin-bottom: 0;
+    padding-bottom: 0;
     overflow-x: auto;
     scrollbar-width: none;
     -ms-overflow-style: none;
@@ -132,6 +143,14 @@
 
   .article.visible { opacity: 1; transform: translateY(0); }
   .article:last-child { border-bottom: none; }
+
+  .article.dismissed {
+    opacity: 0;
+    max-height: 0;
+    padding: 0;
+    overflow: hidden;
+    transition: opacity 0.3s ease, max-height 0.4s ease 0.1s, padding 0.4s ease 0.1s;
+  }
 
   .article-divider {
     font-family: 'Courier New', monospace;
@@ -472,15 +491,17 @@
 </head>
 <body>
 <div class="container">
-  <div class="header">
-    <div class="header-left">
-      <div class="ascii-accent">▚▞
+  <div class="sticky-top">
+    <div class="header">
+      <div class="header-left">
+        <div class="ascii-accent">▚▞
 ▞▚</div>
-      <div class="label">News Feed</div>
+        <div class="label">News Feed</div>
+      </div>
+      <div class="last-updated" id="last-updated"></div>
     </div>
-    <div class="last-updated" id="last-updated"></div>
+    <div class="tabs" id="tabs"></div>
   </div>
-  <div class="tabs" id="tabs"></div>
   <div class="feed" id="feed">
     <div class="loading-state">Fetching headlines<span class="loading-dots"></span></div>
   </div>
@@ -922,6 +943,16 @@ function renderFeed(articles) {
 
         // Track preference
         trackVote(article.category, article.source, vote, !isActive);
+
+        // Dismiss article on downvote
+        if (vote === 'down' && !isActive) {
+          // Also hide the divider after this article
+          const nextSibling = el.nextElementSibling;
+          if (nextSibling && nextSibling.classList.contains('article-divider')) {
+            nextSibling.style.display = 'none';
+          }
+          el.classList.add('dismissed');
+        }
       });
     });
 
