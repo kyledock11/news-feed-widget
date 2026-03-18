@@ -591,6 +591,7 @@ const REFRESH_INTERVAL = 15 * 60 * 1000; // 15 min
 
 let allArticles = [];
 let activeCategory = 'all';
+const dismissedTitles = new Set();
 
 // --- Personalization ---
 function getPrefs() {
@@ -1082,12 +1083,18 @@ function renderFeed(articles) {
 
         // Dismiss article on downvote
         if (vote === 'down' && !isActive) {
-          // Also hide the divider after this article
           const nextSibling = el.nextElementSibling;
           if (nextSibling && nextSibling.classList.contains('article-divider')) {
             nextSibling.style.display = 'none';
           }
           el.classList.add('dismissed');
+          dismissedTitles.add(article.title);
+
+          // Update tab counts with dismissed articles filtered out
+          setTimeout(() => {
+            const visibleArticles = allArticles.filter(a => !dismissedTitles.has(a.title));
+            renderTabs(visibleArticles);
+          }, 400);
         }
       });
     });
